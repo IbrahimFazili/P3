@@ -9,7 +9,7 @@ NVCCFLAGS=-DCUDA
 
 PYTHON=python3
 
-all: mpi gpu basic_serial
+all: mpi gpu basic_serial serial
 
 mpi: build/mpi
 gpu: build/gpu
