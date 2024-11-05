@@ -246,6 +246,11 @@ __global__ void compute_dv(double *d_dv, double *d_h, double g, double dy, int n
         d_dv[i * ny + j] = -g * dh_dy;
     }
 }
+// get haloing working to combine indices?? wtf
+// i have a grid of blocks, and each block is a grid of threads
+// things in same grid/block are going to discontiguous places in memory, which is likely why it is running so slow; view optimize cublas tutorial on youtube
+// access cache lines horizontally to improve indexing efficiency
+// step 1, turn into 2 kernels
 
 // kernel to perform multistep update for h, u, v w additional boundary checks
 __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
@@ -254,14 +259,14 @@ __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, d
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
-    if (i < nx && j < ny) { // Ensure within bounds
+    if (i < nx && j < ny) { // ensure within bounds
         d_h[i * (ny + 1) + j] += (a1 * d_dh[i * ny + j] + a2 * d_dh1[i * ny + j] + a3 * d_dh2[i * ny + j]) * dt;
         
-        // Add boundary checks for d_u and d_v accesses
-        if (i + 1 < nx) { // Avoid out-of-bounds access for d_u
+        // add boundary checks for d_u and d_v accesses
+        if (i + 1 < nx) { // avoid out-of-bounds access for d_u
             d_u[(i + 1) * ny + j] += (a1 * d_du[i * ny + j] + a2 * d_du1[i * ny + j] + a3 * d_du2[i * ny + j]) * dt;
         }
-        if (j + 1 < ny) { // Avoid out-of-bounds access for d_v
+        if (j + 1 < ny) { // avoid out-of-bounds access for d_v
             d_v[i * (ny + 1) + j + 1] += (a1 * d_dv[i * ny + j] + a2 * d_dv1[i * ny + j] + a3 * d_dv2[i * ny + j]) * dt;
         }
     }
