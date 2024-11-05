@@ -54,7 +54,7 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
  */
 void compute_derivatives()
 {
-    #pragma omp parallel for collapse(2)
+    // #pragma omp parallel for collapse(2)
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -74,7 +74,7 @@ void compute_derivatives()
  */
 void multistep(double a1, double a2, double a3)
 {
-    #pragma omp parallel for collapse(2)
+    // #pragma omp parallel for collapse(2)
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -92,7 +92,7 @@ void multistep(double a1, double a2, double a3)
 void step()
 {
     // compute ghost cells
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int j = 0; j < ny; j++) h(nx, j) = h(0, j);
     for (int i = 0; i < nx; i++) h(i, ny) = h(i, 0);
 
@@ -113,7 +113,7 @@ void step()
     multistep(a1, a2, a3);
 
     // update boundaries
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int j = 0; j < ny; j++) u(0, j) = u(nx, j);
     for (int i = 0; i < nx; i++) v(i, 0) = v(i, ny);
 
