@@ -187,206 +187,23 @@
 //     cudaFree(d_dv2);
 // }
 
-// w checks
-// #include <cuda.h>
-// #include <cuda_runtime.h>
-// #include <math.h>
-// #include <cstdio>     // For fprintf
-// #include <cstdlib>    // For exit
-// #include "../common/common.hpp"
-// #include "../common/solver.hpp"
-
-// // vars for grid size
-// int nx, ny;
-// double H, g, dx, dy, dt;
-
-// // device pointers for fields and derivatives
-// double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
-// int t = 0;
-
-// // Macro to check for CUDA errors
-// #define CUDA_CHECK(call) \
-//     do { \
-//         cudaError_t err = call; \
-//         if (err != cudaSuccess) { \
-//             fprintf(stderr, "CUDA error in %s at line %d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
-//             exit(err); \
-//         } \
-//     } while (0)
-
-// // kernel to compute dh on GPU with boundary checks
-// __global__ void compute_dh(double *d_dh, double *d_u, double *d_v, double H, double dx, double dy, int nx, int ny) {
-//     int i = blockIdx.x * blockDim.x + threadIdx.x;
-//     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    
-//     if (i < nx - 1 && j < ny - 1) { // Avoid out-of-bounds access
-//         double du_dx = (d_u[(i + 1) * ny + j] - d_u[i * ny + j]) / dx;
-//         double dv_dy = (d_v[i * (ny + 1) + j + 1] - d_v[i * (ny + 1) + j]) / dy;
-//         d_dh[i * ny + j] = -H * (du_dx + dv_dy);
-//     }
-// }
-
-// // kernel to compute du on GPU with boundary checks
-// __global__ void compute_du(double *d_du, double *d_h, double g, double dx, int nx, int ny) {
-//     int i = blockIdx.x * blockDim.x + threadIdx.x;
-//     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    
-//     if (i < nx - 1 && j < ny) { // Avoid out-of-bounds access
-//         double dh_dx = (d_h[(i + 1) * (ny + 1) + j] - d_h[i * (ny + 1) + j]) / dx;
-//         d_du[i * ny + j] = -g * dh_dx;
-//     }
-// }
-
-// // kernel to compute dv on GPU with boundary checks
-// __global__ void compute_dv(double *d_dv, double *d_h, double g, double dy, int nx, int ny) {
-//     int i = blockIdx.x * blockDim.x + threadIdx.x;
-//     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    
-//     if (i < nx && j < ny - 1) { // Avoid out-of-bounds access
-//         double dh_dy = (d_h[i * (ny + 1) + j + 1] - d_h[i * (ny + 1) + j]) / dy;
-//         d_dv[i * ny + j] = -g * dh_dy;
-//     }
-// }
-
-// // kernel to perform multistep update for h, u, v
-// __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
-//                           double *d_dh1, double *d_du1, double *d_dv1, double *d_dh2, double *d_du2, double *d_dv2,
-//                           double a1, double a2, double a3, double dt, int nx, int ny) {
-//     int i = blockIdx.x * blockDim.x + threadIdx.x;
-//     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    
-//     if (i < nx && j < ny) { // Avoid out-of-bounds access
-//         d_h[i * (ny + 1) + j] += (a1 * d_dh[i * ny + j] + a2 * d_dh1[i * ny + j] + a3 * d_dh2[i * ny + j]) * dt;
-//         d_u[(i + 1) * ny + j] += (a1 * d_du[i * ny + j] + a2 * d_du1[i * ny + j] + a3 * d_du2[i * ny + j]) * dt;
-//         d_v[i * (ny + 1) + j + 1] += (a1 * d_dv[i * ny + j] + a2 * d_dv1[i * ny + j] + a3 * d_dv2[i * ny + j]) * dt;
-//     }
-// }
-
-// // init function to allocate memory on GPU and copy initial data with error checking
-// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
-// {
-//     // Set grid parameters
-//     nx = nx_;
-//     ny = ny_;
-//     H = H_;
-//     g = g_;
-//     dx = length_ / nx;
-//     dy = width_ / ny;
-//     dt = dt_;
-
-//     // allocate device memory
-//     CUDA_CHECK(cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_u, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double)));
-
-//     CUDA_CHECK(cudaMalloc(&d_dh, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_du, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_dv, nx * ny * sizeof(double)));
-
-//     CUDA_CHECK(cudaMalloc(&d_dh1, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_du1, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_dv1, nx * ny * sizeof(double)));
-
-//     CUDA_CHECK(cudaMalloc(&d_dh2, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_du2, nx * ny * sizeof(double)));
-//     CUDA_CHECK(cudaMalloc(&d_dv2, nx * ny * sizeof(double)));
-
-//     // Copy initial data to GPU
-//     CUDA_CHECK(cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice));
-//     CUDA_CHECK(cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice));
-//     CUDA_CHECK(cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice));
-// }
-
-// // step function to perform a single time step on GPU with error checking
-// void step()
-// {
-//     // Set up thread block and grid dimensions
-//     dim3 blockSize(16, 16);
-//     dim3 gridSize((nx + blockSize.x - 1) / blockSize.x, (ny + blockSize.y - 1) / blockSize.y);
-
-//     // Compute coefficients for multistep method
-//     double a1, a2, a3;
-//     if (t == 0) {
-//         a1 = 1.0;
-//         a2 = 0.0;
-//         a3 = 0.0;
-//     } else if (t == 1) {
-//         a1 = 3.0 / 2.0;
-//         a2 = -1.0 / 2.0;
-//         a3 = 0.0;
-//     } else {
-//         a1 = 23.0 / 12.0;
-//         a2 = -16.0 / 12.0;
-//         a3 = 5.0 / 12.0;
-//     }
-
-//     // Launch kernels to compute derivatives with error checks
-//     compute_dh<<<gridSize, blockSize>>>(d_dh, d_u, d_v, H, dx, dy, nx, ny);
-//     CUDA_CHECK(cudaDeviceSynchronize());
-    
-//     compute_du<<<gridSize, blockSize>>>(d_du, d_h, g, dx, nx, ny);
-//     CUDA_CHECK(cudaDeviceSynchronize());
-
-//     compute_dv<<<gridSize, blockSize>>>(d_dv, d_h, g, dy, nx, ny);
-//     CUDA_CHECK(cudaDeviceSynchronize());
-
-//     // Launch kernel to update h, u, v with multistep method and error check
-//     multistep<<<gridSize, blockSize>>>(d_h, d_u, d_v, d_dh, d_du, d_dv, d_dh1, d_du1, d_dv1, d_dh2, d_du2, d_dv2, a1, a2, a3, dt, nx, ny);
-//     CUDA_CHECK(cudaDeviceSynchronize());
-
-//     // Swap derivative buffers
-//     double *tmp;
-//     tmp = d_dh2; d_dh2 = d_dh1; d_dh1 = d_dh; d_dh = tmp;
-//     tmp = d_du2; d_du2 = d_du1; d_du1 = d_du; d_du = tmp;
-//     tmp = d_dv2; d_dv2 = d_dv1; d_dv1 = d_dv; d_dv = tmp;
-
-//     t++;
-// }
-
-// // Transfer function to copy the h field back to the host with error checking
-// void transfer(double *h_host)
-// {
-//     CUDA_CHECK(cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost));
-// }
-
-// // Free GPU memory with error checks
-// void free_memory()
-// {
-//     CUDA_CHECK(cudaFree(d_h));
-//     CUDA_CHECK(cudaFree(d_u));
-//     CUDA_CHECK(cudaFree(d_v));
-
-//     CUDA_CHECK(cudaFree(d_dh));
-//     CUDA_CHECK(cudaFree(d_du));
-//     CUDA_CHECK(cudaFree(d_dv));
-
-//     CUDA_CHECK(cudaFree(d_dh1));
-//     CUDA_CHECK(cudaFree(d_du1));
-//     CUDA_CHECK(cudaFree(d_dv1));
-
-//     CUDA_CHECK(cudaFree(d_dh2));
-//     CUDA_CHECK(cudaFree(d_du2));
-//     CUDA_CHECK(cudaFree(d_dv2));
-// }
-
-
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <math.h>
-#include <cstdio>     // For fprintf
-#include <cstdlib>    // For exit
+#include <cstdio>     // fprintf
+#include <cstdlib>    // exit
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
 
-// Variables for grid size
+// vars for grid size
 int nx, ny;
 double H, g, dx, dy, dt;
 
-// Device pointers for fields and derivatives
+// dev ptrs for fields and derivs
 double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
 int t = 0;
 
-// Macro to check for CUDA errors
+// macro to check for cuda errors
 #define CUDA_CHECK(call) \
     do { \
         cudaError_t err = call; \
@@ -396,41 +213,41 @@ int t = 0;
         } \
     } while (0)
 
-// Kernel to compute dh on GPU with boundary checks
+// kernel to compute dh on gpu w boundary checks
 __global__ void compute_dh(double *d_dh, double *d_u, double *d_v, double H, double dx, double dy, int nx, int ny) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
-    if (i < nx - 1 && j < ny - 1) { // Avoid out-of-bounds access
+    if (i < nx - 1 && j < ny - 1) { // avoid out-of-bounds access
         double du_dx = (d_u[(i + 1) * ny + j] - d_u[i * ny + j]) / dx;
         double dv_dy = (d_v[i * (ny + 1) + j + 1] - d_v[i * (ny + 1) + j]) / dy;
         d_dh[i * ny + j] = -H * (du_dx + dv_dy);
     }
 }
 
-// Kernel to compute du on GPU with boundary checks
+// kernel to compute du on gpu w boundary checks
 __global__ void compute_du(double *d_du, double *d_h, double g, double dx, int nx, int ny) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
-    if (i < nx - 1 && j < ny) { // Avoid out-of-bounds access
+    if (i < nx - 1 && j < ny) { // avoid out-of-bounds access
         double dh_dx = (d_h[(i + 1) * (ny + 1) + j] - d_h[i * (ny + 1) + j]) / dx;
         d_du[i * ny + j] = -g * dh_dx;
     }
 }
 
-// Kernel to compute dv on GPU with boundary checks
+// kernel to compute dv on gpu w boundary checks
 __global__ void compute_dv(double *d_dv, double *d_h, double g, double dy, int nx, int ny) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
-    if (i < nx && j < ny - 1) { // Avoid out-of-bounds access
+    if (i < nx && j < ny - 1) { // avoid out-of-bounds access
         double dh_dy = (d_h[i * (ny + 1) + j + 1] - d_h[i * (ny + 1) + j]) / dy;
         d_dv[i * ny + j] = -g * dh_dy;
     }
 }
 
-// Kernel to perform multistep update for h, u, v with additional boundary checks
+// kernel to perform multistep update for h, u, v w additional boundary checks
 __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
                           double *d_dh1, double *d_du1, double *d_dv1, double *d_dh2, double *d_du2, double *d_dv2,
                           double a1, double a2, double a3, double dt, int nx, int ny) {
@@ -450,10 +267,10 @@ __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, d
     }
 }
 
-// Initialization function to allocate memory on GPU and copy initial data with error checking
+// init fn to allocate mem on gpu and cp initial data 
 void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
 {
-    // Set grid parameters
+    // set grid parameters
     nx = nx_;
     ny = ny_;
     H = H_;
@@ -462,37 +279,37 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     dy = width_ / ny;
     dt = dt_;
 
-    // Allocate device memory
-    CUDA_CHECK(cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_u, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double)));
+    // alloc device mem
+    cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double));
+    cudaMalloc(&d_u, nx * ny * sizeof(double));
+    cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double));
 
-    CUDA_CHECK(cudaMalloc(&d_dh, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_du, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_dv, nx * ny * sizeof(double)));
+    cudaMalloc(&d_dh, nx * ny * sizeof(double));
+    cudaMalloc(&d_du, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv, nx * ny * sizeof(double));
 
-    CUDA_CHECK(cudaMalloc(&d_dh1, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_du1, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_dv1, nx * ny * sizeof(double)));
+    cudaMalloc(&d_dh1, nx * ny * sizeof(double));
+    cudaMalloc(&d_du1, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv1, nx * ny * sizeof(double));
 
-    CUDA_CHECK(cudaMalloc(&d_dh2, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_du2, nx * ny * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_dv2, nx * ny * sizeof(double)));
+    cudaMalloc(&d_dh2, nx * ny * sizeof(double));
+    cudaMalloc(&d_du2, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv2, nx * ny * sizeof(double));
 
-    // Copy initial data to GPU
-    CUDA_CHECK(cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice));
+    // cp init data to gpu
+    cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
 }
 
-// Step function to perform a single time step on GPU with error checking
+// step fn to perform single time step on gpu 
 void step()
 {
-    // Set up thread block and grid dimensions
+    // set up thread block and grid dimensions
     dim3 blockSize(16, 16);
     dim3 gridSize((nx + blockSize.x - 1) / blockSize.x, (ny + blockSize.y - 1) / blockSize.y);
 
-    // Compute coefficients for multistep method
+    // compute coefficients for multistep method
     double a1, a2, a3;
     if (t == 0) {
         a1 = 1.0;
@@ -508,21 +325,21 @@ void step()
         a3 = 5.0 / 12.0;
     }
 
-    // Launch kernels to compute derivatives with error checks
+    // launch kernels to compute derivs
     compute_dh<<<gridSize, blockSize>>>(d_dh, d_u, d_v, H, dx, dy, nx, ny);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
     
     compute_du<<<gridSize, blockSize>>>(d_du, d_h, g, dx, nx, ny);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
 
     compute_dv<<<gridSize, blockSize>>>(d_dv, d_h, g, dy, nx, ny);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
 
-    // Launch kernel to update h, u, v with multistep method and error check
+    // launch kernel to update h, u, v with multistep method
     multistep<<<gridSize, blockSize>>>(d_h, d_u, d_v, d_dh, d_du, d_dv, d_dh1, d_du1, d_dv1, d_dh2, d_du2, d_dv2, a1, a2, a3, dt, nx, ny);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaDeviceSynchronize();
 
-    // Swap derivative buffers
+    // swap deriv buffers
     double *tmp;
     tmp = d_dh2; d_dh2 = d_dh1; d_dh1 = d_dh; d_dh = tmp;
     tmp = d_du2; d_du2 = d_du1; d_du1 = d_du; d_du = tmp;
@@ -531,28 +348,28 @@ void step()
     t++;
 }
 
-// Transfer function to copy the h field back to the host with error checking
+// transfer fn to copy h field back to host 
 void transfer(double *h_host)
 {
-    CUDA_CHECK(cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost));
+    cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost);
 }
 
-// Free GPU memory with error checks
+// free gpu mem 
 void free_memory()
 {
-    CUDA_CHECK(cudaFree(d_h));
-    CUDA_CHECK(cudaFree(d_u));
-    CUDA_CHECK(cudaFree(d_v));
+    cudaFree(d_h);
+    cudaFree(d_u);
+    cudaFree(d_v);
 
-    CUDA_CHECK(cudaFree(d_dh));
-    CUDA_CHECK(cudaFree(d_du));
-    CUDA_CHECK(cudaFree(d_dv));
+    cudaFree(d_dh);
+    cudaFree(d_du);
+    cudaFree(d_dv);
 
-    CUDA_CHECK(cudaFree(d_dh1));
-    CUDA_CHECK(cudaFree(d_du1));
-    CUDA_CHECK(cudaFree(d_dv1));
+    cudaFree(d_dh1);
+    cudaFree(d_du1);
+    cudaFree(d_dv1);
 
-    CUDA_CHECK(cudaFree(d_dh2));
-    CUDA_CHECK(cudaFree(d_du2));
-    CUDA_CHECK(cudaFree(d_dv2));
+    cudaFree(d_dh2);
+    cudaFree(d_du2);
+    cudaFree(d_dv2);
 }
