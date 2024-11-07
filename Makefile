@@ -1,14 +1,12 @@
 CPP=CC
 CFLAGS=-lm
 COPTFLAGS=-O3 -ffast-math -fopenmp -flto -march=native -funroll-loops -fprefetch-loop-arrays
-OPTFLAGS=-O3 -ffast-math -fopenmp -flto -march=native -funroll-loops -fprefetch-loop-arrays
 MPIFLAGS=-DMPI
 DEBUGFLAGS=-g -pg
 
 NVCC=nvcc
 NVCCFLAGS=-DCUDA
 # NVCCFLAGS=-DCUDA -O3 -dlto -use_fast_math -Xptxas -dlcm=ca -Xcompiler "-funroll-loops"
-
 
 PYTHON=python3
 

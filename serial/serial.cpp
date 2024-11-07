@@ -127,112 +127,17 @@ void step()
 }
 
 /**
- * This function computes the boundaries for the horizontal boundaries.
- * We do this by copying the values from the opposite side of the domain.
+ * This is your transfer function! Since everything is running on the same node,
+ * you don't need to do anything here.
  */
-void compute_boundaries_horizontal()
-{
-    for (int j = 0; j < ny; j++)
-    {
-        u(0, j) = u(nx, j);
-    }
-}
-
-/**
- * This function computes the boundaries for the vertical boundaries.
- * We do this by copying the values from the opposite side of the domain.
- */
-void compute_boundaries_vertical()
-{
-    for (int i = 0; i < nx; i++)
-    {
-        v(i, 0) = v(i, ny);
-    }
-}
-
-/**
- * This function swaps the buffers for the derivatives of our different fields.
- * This is done so that we can use the derivatives from the previous time steps
- * in our multistep method.
- */
-void swap_buffers()
-{
-    double *tmp;
-
-    tmp = dh2;
-    dh2 = dh1;
-    dh1 = dh;
-    dh = tmp;
-
-    tmp = du2;
-    du2 = du1;
-    du1 = du;
-    du = tmp;
-
-    tmp = dv2;
-    dv2 = dv1;
-    dv1 = dv;
-    dv = tmp;
-}
-
-int t = 0;
-
-void step()
-{
-    // First, we compute our ghost cells as we need them for our derivatives
-    compute_ghost_horizontal();
-    compute_ghost_vertical();
-
-    // Next, we compute the derivatives of our fields
-    compute_dh();
-    compute_du();
-    compute_dv();
-
-    // We set the coefficients for our multistep method
-    double a1, a2, a3;
-
-    if (t == 0)
-    {
-        a1 = 1.0;
-    }
-    else if (t == 1)
-    {
-        a1 = 3.0 / 2.0;
-        a2 = -1.0 / 2.0;
-    }
-    else
-    {
-        a1 = 23.0 / 12.0;
-        a2 = -16.0 / 12.0;
-        a3 = 5.0 / 12.0;
-    }
-
-    // Finally, we compute the next time step using our multistep method
-    multistep(a1, a2, a3);
-
-    // We compute the boundaries for our fields, as they are (1) needed for
-    // the next time step, and (2) aren't explicitly set in our multistep method
-    compute_boundaries_horizontal();
-    compute_boundaries_vertical();
-
-    // We swap the buffers for our derivatives so that we can use the derivatives
-    // from the previous time steps in our multistep method, then increment
-    // the time step counter
-    swap_buffers();
-
-    t++;
-}
-
-// Since all of our memory is already on the CPU, and specifically in the
-// height field, we don't need to transfer anything
 void transfer(double *h)
 {
     return;
 }
 
-// We free all of the memory that we allocated. We didn't create the initial
-// height or velocity fields, so we don't need to free them. They are the
-// responsibility of the calling code.
+/**
+ * This is your finalization function! Free whatever memory you've allocated.
+ */
 void free_memory()
 {
     free(dh); free(du); free(dv);

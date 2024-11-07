@@ -83,7 +83,7 @@ __global__ void multistep(double *d_h, double *d_u, double *d_v, double *d_dh, d
     }
 }
 
-// Kernel to compute horizontal ghost cells
+// kernel to compute horizontal ghost cells
 __global__ void compute_ghost_horizontal(double *d_h, int nx, int ny) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     if (j < ny) {
@@ -91,7 +91,7 @@ __global__ void compute_ghost_horizontal(double *d_h, int nx, int ny) {
     }
 }
 
-// Kernel to compute vertical ghost cells
+// kernel to compute vertical ghost cells
 __global__ void compute_ghost_vertical(double *d_h, int nx, int ny) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < nx) {
