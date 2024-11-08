@@ -1,3 +1,5 @@
 salloc --nodes 2 --qos interactive --time 01:00:00 --constraint gpu --gpus 3 --account m4776
 
-srun -N 2 -n 2 ./mpi
+srun -N 2 -n 128 ./build/mpi --nx 2048 --ny 2048 --num_iter 1000
+
+srun -N 1 -n 1 ./build/mpi
