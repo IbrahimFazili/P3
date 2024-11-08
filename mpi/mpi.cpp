@@ -6,7 +6,7 @@
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
 // Add this near the top of your file, after the includes
-#define idx(i,j) ((i) * (local_ny + 2) + (j))
+#define idx(i,j) ((i) * (local_ny) + (j))
 
 // Global variables for domain decomposition
 int rank, num_procs;
