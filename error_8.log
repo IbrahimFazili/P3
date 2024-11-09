@@ -1,0 +1,24 @@
+Initialization time for rank 1: 0.041951
+Initialization time for rank 2: 0.052168
+Initialization time for rank 6: 0.052231
+Initialization time for rank 0: 0.046118
+Initialization time for rank 3: 0.052343
+Initialization time for rank 4: 0.010114
+Initialization time for rank 5: 0.021850
+Initialization time for rank 7: 0.033962
+Execution time for rank 0: 13.036761
+Execution time for rank 2: 13.039122
+Execution time for rank 4: 13.039012
+Execution time for rank 5: 13.038939
+Execution time for rank 6: 13.039114
+Execution time for rank 7: 13.038958
+Execution time for rank 1: 13.038753
+Execution time for rank 3: 13.038910
+Free memory time for rank 2: 0.000307
+Free memory time for rank 3: 0.000297
+Free memory time for rank 4: 0.000295
+Free memory time for rank 5: 0.000293
+Free memory time for rank 6: 0.000305
+Free memory time for rank 7: 0.000297
+Free memory time for rank 1: 0.000295
+Free memory time for rank 0: 0.000667

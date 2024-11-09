@@ -5,8 +5,7 @@
 
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
-// Add this near the top of your file, after the includes
-#define idx(i,j) ((i) * (local_ny) + (j))
+#define idx(i, j) ((i) * (local_ny) + (j))  // Index macro for 2D array
 
 // Global variables for domain decomposition
 int rank, num_procs;
@@ -25,8 +24,9 @@ double *send_buffer, *recv_buffer;
 double H, g, dx, dy, dt;
 int t = 0;
 
+// Function to initialize the domain and allocate memory
 void init(double *h0, double *u0, double *v0, double length_, double width_, 
-         int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+          int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
 {
     rank = rank_;
     num_procs = num_procs_;
@@ -77,14 +77,15 @@ void init(double *h0, double *u0, double *v0, double length_, double width_,
     dy = width_ / global_ny;
     dt = dt_;
 
-    // Scatter initial conditions from rank 0
+    // Record and output initialization time for each rank
+    double init_time = MPI_Wtime();
+    // Perform initialization (scatter initial conditions, etc.)
     if (rank == 0) {
-        // Copy initial data to local arrays
         for (int i = 0; i < local_nx; i++) {
             for (int j = 0; j < local_ny; j++) {
-                h[idx(i+1,j+1)] = h0[idx(i,j)];
-                u[idx(i+1,j+1)] = u0[idx(i,j)];
-                v[idx(i+1,j+1)] = v0[idx(i,j)];
+                h[idx(i+1, j+1)] = h0[idx(i, j)];
+                u[idx(i+1, j+1)] = u0[idx(i, j)];
+                v[idx(i+1, j+1)] = v0[idx(i, j)];
             }
         }
     }
@@ -93,8 +94,13 @@ void init(double *h0, double *u0, double *v0, double length_, double width_,
     MPI_Bcast(h, (local_nx + 2) * (local_ny + 2), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(u, (local_nx + 2) * (local_ny + 2), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(v, (local_nx + 2) * (local_ny + 2), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Calculate elapsed time for initialization
+    init_time = MPI_Wtime() - init_time;
+    printf("Initialization time for rank %d: %.6f\n", rank, init_time);
 }
 
+// Halo exchange function to update ghost cells with neighboring rank data
 void exchange_ghost_cells()
 {
     MPI_Status status;
@@ -124,19 +130,17 @@ void exchange_ghost_cells()
     }
 }
 
+// Function to compute derivatives
 void compute_derivatives()
 {
     for (int i = 1; i <= local_nx; i++) {
         for (int j = 1; j <= local_ny; j++) {
-            // Compute height derivatives
             double dx_h = (h[idx(i+1,j)] - h[idx(i-1,j)]) / (2.0 * dx);
             double dy_h = (h[idx(i,j+1)] - h[idx(i,j-1)]) / (2.0 * dy);
             
-            // Compute velocity derivatives
             double dx_u = (u[idx(i+1,j)] - u[idx(i-1,j)]) / (2.0 * dx);
             double dy_v = (v[idx(i,j+1)] - v[idx(i,j-1)]) / (2.0 * dy);
 
-            // Store derivatives
             dh[idx(i-1,j-1)] = -H * (dx_u + dy_v);
             du[idx(i-1,j-1)] = -g * dx_h;
             dv[idx(i-1,j-1)] = -g * dy_h;
@@ -144,27 +148,17 @@ void compute_derivatives()
     }
 }
 
+// Function to perform a single simulation step
 void step()
 {
     exchange_ghost_cells();
     compute_derivatives();
 
-    // Set multistep coefficients
     double a1, a2, a3;
-    if (t == 0) {
-        a1 = 1.0;
-        a2 = a3 = 0.0;
-    } else if (t == 1) {
-        a1 = 3.0 / 2.0;
-        a2 = -1.0 / 2.0;
-        a3 = 0.0;
-    } else {
-        a1 = 23.0 / 12.0;
-        a2 = -16.0 / 12.0;
-        a3 = 5.0 / 12.0;
-    }
+    if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+    else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+    else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
 
-    // Update fields
     for (int i = 1; i <= local_nx; i++) {
         for (int j = 1; j <= local_ny; j++) {
             h[idx(i,j)] += (a1 * dh[idx(i-1,j-1)] + a2 * dh1[idx(i-1,j-1)] + 
@@ -176,7 +170,6 @@ void step()
         }
     }
 
-    // Swap derivative buffers
     double *tmp;
     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
     tmp = du2; du2 = du1; du1 = du; du = tmp;
@@ -184,6 +177,7 @@ void step()
 
     t++;
 }
+
 
 void transfer(double *h_recv)
 {

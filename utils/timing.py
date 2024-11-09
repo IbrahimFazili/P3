@@ -91,6 +91,9 @@ def time_mpi_weak_scaling(executable_name, sizes, ranks_list):
 
         command = ["srun", f"--nodes={nodes}", f"--ntasks-per-node={tasks}", executable_name, "--nx", str(size), "--ny", str(size), "--num_iter", str(num_iters)]
         result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+        # with open(f"output_{ranks}.log", "w") as out_file, open(f"error_{ranks}.log", "w") as err_file:
+        #     result = run(command, stdout=out_file, stderr=err_file, universal_newlines=True)
+
 
         for r in range(ranks):
             init_time = re.search(f"Initialization time for rank {r}: (\d+\.\d+)", result.stderr).group(1)
