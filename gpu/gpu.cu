@@ -41,6 +41,8 @@
 // double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
 // int t = 0;
 
+// #define BLOCKSIZE 512
+
 // // Combined kernel to compute ghost cells, boundaries, and derivatives
 // __global__ void compute_step(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
 //                              double H, double g, double dx, double dy, int nx, int ny) {
@@ -99,8 +101,8 @@
 
 // // Step function to perform a single time step on the GPU
 // void step() {
-//     dim3 gridDim((nx * ny + 1023) / 1024); // Launch enough blocks to cover all elements
-//     dim3 blockDim(1024); // 1024 threads per block
+//     dim3 gridDim((nx * ny + BLOCKSIZE - 1) / BLOCKSIZE); // Launch enough blocks to cover all elements
+//     dim3 blockDim(BLOCKSIZE); // 1024 threads per block
 
 //     double a1, a2, a3;
 //     if (t == 0) {
@@ -623,160 +625,160 @@
 // Total time: 73.271238
 // Timing gpu size 10000
 // Total time: 90.138533
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <math.h>
-#include <cstdio>
-#include <cstdlib>
-#include "../common/common.hpp"
-#include "../common/solver.hpp"
-#include <cublas_v2.h>
+// #include <cuda.h>
+// #include <cuda_runtime.h>
+// #include <math.h>
+// #include <cstdio>
+// #include <cstdlib>
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+// #include <cublas_v2.h>
 
-// vars for grid size
-int nx, ny;
-double H, g, dx, dy, dt;
+// // vars for grid size
+// int nx, ny;
+// double H, g, dx, dy, dt;
 
-// dev ptrs for fields and derivs
-double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
-int t = 0;
+// // dev ptrs for fields and derivs
+// double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
+// int t = 0;
 
-#define BLOCKSIZE 512  // Adjusted for better occupancy on Perlmutter
+// #define BLOCKSIZE 512  // Adjusted for better occupancy on Perlmutter
 
-__global__ void compute_and_multistep(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
-                                      double *d_dh1, double *d_du1, double *d_dv1, double *d_dh2, double *d_du2, double *d_dv2,
-                                      double H, double g, double dx, double dy, double a1, double a2, double a3, double dt,
-                                      int nx, int ny) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int i = idx / ny; // Convert linear idx to 2D grid coordinates
-    int j = idx % ny;
+// __global__ void compute_and_multistep(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
+//                                       double *d_dh1, double *d_du1, double *d_dv1, double *d_dh2, double *d_du2, double *d_dv2,
+//                                       double H, double g, double dx, double dy, double a1, double a2, double a3, double dt,
+//                                       int nx, int ny) {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//     int i = idx / ny; // Convert linear idx to 2D grid coordinates
+//     int j = idx % ny;
 
-    if (i >= nx || j >= ny) return; // Boundary check
+//     if (i >= nx || j >= ny) return; // Boundary check
 
-    // Directly load values from global memory
-    double h = d_h[i * (ny + 1) + j];
-    double u = d_u[i * ny + j];
-    double v = d_v[i * (ny + 1) + j];
+//     // Directly load values from global memory
+//     double h = d_h[i * (ny + 1) + j];
+//     double u = d_u[i * ny + j];
+//     double v = d_v[i * (ny + 1) + j];
 
-    // Calculate ghost cells for h
-    if (j < ny && i == nx) d_h[i * (ny + 1) + j] = d_h[(nx - 1) * (ny + 1) + j];  // Last row
-    if (i < nx && j == ny) d_h[i * (ny + 1) + j] = d_h[i * (ny + 1) + (ny - 1)];  // Last column
+//     // Calculate ghost cells for h
+//     if (j < ny && i == nx) d_h[i * (ny + 1) + j] = d_h[(nx - 1) * (ny + 1) + j];  // Last row
+//     if (i < nx && j == ny) d_h[i * (ny + 1) + j] = d_h[i * (ny + 1) + (ny - 1)];  // Last column
 
-    // Apply boundary conditions for u and v
-    if (j < ny && i == 0) d_u[i * ny + j] = d_u[(nx - 1) * ny + j];  // First row
-    if (i < nx && j == 0) d_v[i * (ny + 1) + j] = d_v[i * (ny + 1) + (ny - 1)]; // First column
+//     // Apply boundary conditions for u and v
+//     if (j < ny && i == 0) d_u[i * ny + j] = d_u[(nx - 1) * ny + j];  // First row
+//     if (i < nx && j == 0) d_v[i * (ny + 1) + j] = d_v[i * (ny + 1) + (ny - 1)]; // First column
 
-    // Compute dh: finite differences along x and y using direct global memory access
-    if (i < nx - 1 && j < ny - 1) {
-        double du_dx = (d_u[(i + 1) * ny + j] - u) / dx;
-        double dv_dy = (d_v[i * (ny + 1) + j + 1] - v) / dy;
-        d_dh[i * ny + j] = -H * (du_dx + dv_dy);
-    }
+//     // Compute dh: finite differences along x and y using direct global memory access
+//     if (i < nx - 1 && j < ny - 1) {
+//         double du_dx = (d_u[(i + 1) * ny + j] - u) / dx;
+//         double dv_dy = (d_v[i * (ny + 1) + j + 1] - v) / dy;
+//         d_dh[i * ny + j] = -H * (du_dx + dv_dy);
+//     }
 
-    // Compute du: finite differences along x using direct global memory access
-    if (i < nx - 1 && j < ny) {
-        double dh_dx = (d_h[(i + 1) * (ny + 1) + j] - h) / dx;
-        d_du[i * ny + j] = -g * dh_dx;
-    }
+//     // Compute du: finite differences along x using direct global memory access
+//     if (i < nx - 1 && j < ny) {
+//         double dh_dx = (d_h[(i + 1) * (ny + 1) + j] - h) / dx;
+//         d_du[i * ny + j] = -g * dh_dx;
+//     }
 
-    // Compute dv: finite differences along y using direct global memory access
-    if (i < nx && j < ny - 1) {
-        double dh_dy = (d_h[i * (ny + 1) + j + 1] - h) / dy;
-        d_dv[i * ny + j] = -g * dh_dy;
-    }
+//     // Compute dv: finite differences along y using direct global memory access
+//     if (i < nx && j < ny - 1) {
+//         double dh_dy = (d_h[i * (ny + 1) + j + 1] - h) / dy;
+//         d_dv[i * ny + j] = -g * dh_dy;
+//     }
 
-    __syncthreads();
+//     __syncthreads();
 
-    // Multistep update for h, u, v
-    d_h[i * (ny + 1) + j] += (a1 * d_dh[i * ny + j] + a2 * d_dh1[i * ny + j] + a3 * d_dh2[i * ny + j]) * dt;
-    if (i + 1 < nx) {
-        d_u[(i + 1) * ny + j] += (a1 * d_du[i * ny + j] + a2 * d_du1[i * ny + j] + a3 * d_du2[i * ny + j]) * dt;
-    }
-    if (j + 1 < ny) {
-        d_v[i * (ny + 1) + j + 1] += (a1 * d_dv[i * ny + j] + a2 * d_dv1[i * ny + j] + a3 * d_dv2[i * ny + j]) * dt;
-    }
-}
+//     // Multistep update for h, u, v
+//     d_h[i * (ny + 1) + j] += (a1 * d_dh[i * ny + j] + a2 * d_dh1[i * ny + j] + a3 * d_dh2[i * ny + j]) * dt;
+//     if (i + 1 < nx) {
+//         d_u[(i + 1) * ny + j] += (a1 * d_du[i * ny + j] + a2 * d_du1[i * ny + j] + a3 * d_du2[i * ny + j]) * dt;
+//     }
+//     if (j + 1 < ny) {
+//         d_v[i * (ny + 1) + j + 1] += (a1 * d_dv[i * ny + j] + a2 * d_dv1[i * ny + j] + a3 * d_dv2[i * ny + j]) * dt;
+//     }
+// }
 
-void step() {
-    dim3 gridDim((nx * ny + BLOCKSIZE - 1) / BLOCKSIZE); // Launch enough blocks to cover all elements
-    dim3 blockDim(BLOCKSIZE);
+// void step() {
+//     dim3 gridDim((nx * ny + BLOCKSIZE - 1) / BLOCKSIZE); // Launch enough blocks to cover all elements
+//     dim3 blockDim(BLOCKSIZE);
 
-    double a1, a2, a3;
-    if (t == 0) {
-        a1 = 1.0;
-        a2 = 0.0;
-        a3 = 0.0;
-    } else if (t == 1) {
-        a1 = 3.0 / 2.0;
-        a2 = -1.0 / 2.0;
-        a3 = 0.0;
-    } else {
-        a1 = 23.0 / 12.0;
-        a2 = -16.0 / 12.0;
-        a3 = 5.0 / 12.0;
-    }
+//     double a1, a2, a3;
+//     if (t == 0) {
+//         a1 = 1.0;
+//         a2 = 0.0;
+//         a3 = 0.0;
+//     } else if (t == 1) {
+//         a1 = 3.0 / 2.0;
+//         a2 = -1.0 / 2.0;
+//         a3 = 0.0;
+//     } else {
+//         a1 = 23.0 / 12.0;
+//         a2 = -16.0 / 12.0;
+//         a3 = 5.0 / 12.0;
+//     }
 
-    int shared_mem_size = 3 * BLOCKSIZE * sizeof(double);
-    compute_and_multistep<<<gridDim, blockDim, shared_mem_size>>>(d_h, d_u, d_v, d_dh, d_du, d_dv,
-                                                                  d_dh1, d_du1, d_dv1, d_dh2, d_du2, d_dv2,
-                                                                  H, g, dx, dy, a1, a2, a3, dt, nx, ny);
-    cudaDeviceSynchronize();
+//     int shared_mem_size = 3 * BLOCKSIZE * sizeof(double);
+//     compute_and_multistep<<<gridDim, blockDim, shared_mem_size>>>(d_h, d_u, d_v, d_dh, d_du, d_dv,
+//                                                                   d_dh1, d_du1, d_dv1, d_dh2, d_du2, d_dv2,
+//                                                                   H, g, dx, dy, a1, a2, a3, dt, nx, ny);
+//     cudaDeviceSynchronize();
 
-    double *tmp;
-    tmp = d_dh2; d_dh2 = d_dh1; d_dh1 = d_dh; d_dh = tmp;
-    tmp = d_du2; d_du2 = d_du1; d_du1 = d_du; d_du = tmp;
-    tmp = d_dv2; d_dv2 = d_dv1; d_dv1 = d_dv; d_dv = tmp;
+//     double *tmp;
+//     tmp = d_dh2; d_dh2 = d_dh1; d_dh1 = d_dh; d_dh = tmp;
+//     tmp = d_du2; d_du2 = d_du1; d_du1 = d_du; d_du = tmp;
+//     tmp = d_dv2; d_dv2 = d_dv1; d_dv1 = d_dv; d_dv = tmp;
 
-    t++;
-}
+//     t++;
+// }
 
-// Transfer function to copy h field back to host
-void transfer(double *h_host) {
-    cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost);
-}
+// // Transfer function to copy h field back to host
+// void transfer(double *h_host) {
+//     cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost);
+// }
 
-// Free GPU memory
-void free_memory() {
-    cudaFree(d_h);
-    cudaFree(d_u);
-    cudaFree(d_v);
-    cudaFree(d_dh);
-    cudaFree(d_du);
-    cudaFree(d_dv);
-    cudaFree(d_dh1);
-    cudaFree(d_du1);
-    cudaFree(d_dv1);
-    cudaFree(d_dh2);
-    cudaFree(d_du2);
-    cudaFree(d_dv2);
-}
+// // Free GPU memory
+// void free_memory() {
+//     cudaFree(d_h);
+//     cudaFree(d_u);
+//     cudaFree(d_v);
+//     cudaFree(d_dh);
+//     cudaFree(d_du);
+//     cudaFree(d_dv);
+//     cudaFree(d_dh1);
+//     cudaFree(d_du1);
+//     cudaFree(d_dv1);
+//     cudaFree(d_dh2);
+//     cudaFree(d_du2);
+//     cudaFree(d_dv2);
+// }
 
-// Initialize GPU memory and copy initial data
-void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_) {
-    nx = nx_;
-    ny = ny_;
-    H = H_;
-    g = g_;
-    dx = length_ / nx;
-    dy = width_ / ny;
-    dt = dt_;
+// // Initialize GPU memory and copy initial data
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_) {
+//     nx = nx_;
+//     ny = ny_;
+//     H = H_;
+//     g = g_;
+//     dx = length_ / nx;
+//     dy = width_ / ny;
+//     dt = dt_;
 
-    cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double));
-    cudaMalloc(&d_u, nx * ny * sizeof(double));
-    cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double));
-    cudaMalloc(&d_dh, nx * ny * sizeof(double));
-    cudaMalloc(&d_du, nx * ny * sizeof(double));
-    cudaMalloc(&d_dv, nx * ny * sizeof(double));
-    cudaMalloc(&d_dh1, nx * ny * sizeof(double));
-    cudaMalloc(&d_du1, nx * ny * sizeof(double));
-    cudaMalloc(&d_dv1, nx * ny * sizeof(double));
-    cudaMalloc(&d_dh2, nx * ny * sizeof(double));
-    cudaMalloc(&d_du2, nx * ny * sizeof(double));
-    cudaMalloc(&d_dv2, nx * ny * sizeof(double));
+//     cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double));
+//     cudaMalloc(&d_u, nx * ny * sizeof(double));
+//     cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double));
+//     cudaMalloc(&d_dh, nx * ny * sizeof(double));
+//     cudaMalloc(&d_du, nx * ny * sizeof(double));
+//     cudaMalloc(&d_dv, nx * ny * sizeof(double));
+//     cudaMalloc(&d_dh1, nx * ny * sizeof(double));
+//     cudaMalloc(&d_du1, nx * ny * sizeof(double));
+//     cudaMalloc(&d_dv1, nx * ny * sizeof(double));
+//     cudaMalloc(&d_dh2, nx * ny * sizeof(double));
+//     cudaMalloc(&d_du2, nx * ny * sizeof(double));
+//     cudaMalloc(&d_dv2, nx * ny * sizeof(double));
 
-    cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
-}
+//     cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
+//     cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+//     cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
+// }
 
 
 // Max error: 2.220446049250313e-14
@@ -2001,4 +2003,222 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
 // }
 
 
+//now fastest? by a lil?
+// 1D, combined kernels, synch, 16, cuda graph
+// Max error: 0.04357515599920525
+// Timing gpu size 100
+// Total time: 0.419083
+// Timing gpu size 500
+// Total time: 0.417432
+// Timing gpu size 1000
+// Total time: 1.1939229999999998
+// Timing gpu size 2000
+// Total time: 3.8777719999999998
+// Timing gpu size 3000
+// Total time: 8.343865000000001
+// Timing gpu size 4000
+// Total time: 14.607032
+// Timing gpu size 5000
+// Total time: 22.697254
+// Timing gpu size 6000
+// Total time: 32.514463
+// Timing gpu size 7000
+// Total time: 44.12294
+// Timing gpu size 8000
+// Total time: 57.421859000000005
+// Timing gpu size 9000
+// Total time: 72.858824
+// Timing gpu size 10000
+// Total time: 90.117023
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <math.h>
+#include <cstdio>
+#include <cstdlib>
+#include "../common/common.hpp"
+#include "../common/solver.hpp"
+#include <cublas_v2.h>
+#include <cuda_runtime_api.h>
 
+// vars for grid size
+int nx, ny;
+double H, g, dx, dy, dt;
+
+// dev ptrs for fields and derivs
+double *d_h, *d_u, *d_v, *d_dh, *d_du, *d_dv, *d_dh1, *d_du1, *d_dv1, *d_dh2, *d_du2, *d_dv2;
+int t = 0;
+
+#define BLOCKSIZE 512
+
+// Main kernel without boundary checks
+__global__ void compute_and_multistep_kernel(double *d_h, double *d_u, double *d_v, double *d_dh, double *d_du, double *d_dv,
+                                             double *d_dh1, double *d_du1, double *d_dv1, double *d_dh2, double *d_du2, double *d_dv2,
+                                             double H, double g, double dx, double dy, double a1, double a2, double a3, double dt,
+                                             int nx, int ny) {
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = idx / ny; // Convert linear idx to 2D grid coordinates
+    int j = idx % ny;
+
+    if (i >= nx || j >= ny) return; // Boundary check
+
+    // Directly load values from global memory
+    double h = d_h[i * (ny + 1) + j];
+    double u = d_u[i * ny + j];
+    double v = d_v[i * (ny + 1) + j];
+
+    // Calculate ghost cells for h
+    if (j < ny && i == nx) d_h[i * (ny + 1) + j] = d_h[(nx - 1) * (ny + 1) + j];  // Last row
+    if (i < nx && j == ny) d_h[i * (ny + 1) + j] = d_h[i * (ny + 1) + (ny - 1)];  // Last column
+
+    // Apply boundary conditions for u and v
+    if (j < ny && i == 0) d_u[i * ny + j] = d_u[(nx - 1) * ny + j];  // First row
+    if (i < nx && j == 0) d_v[i * (ny + 1) + j] = d_v[i * (ny + 1) + (ny - 1)]; // First column
+
+    // Compute dh: finite differences along x and y using direct global memory access
+    if (i < nx - 1 && j < ny - 1) {
+        double du_dx = (d_u[(i + 1) * ny + j] - u) / dx;
+        double dv_dy = (d_v[i * (ny + 1) + j + 1] - v) / dy;
+        d_dh[i * ny + j] = -H * (du_dx + dv_dy);
+    }
+
+    // Compute du: finite differences along x using direct global memory access
+    if (i < nx - 1 && j < ny) {
+        double dh_dx = (d_h[(i + 1) * (ny + 1) + j] - h) / dx;
+        d_du[i * ny + j] = -g * dh_dx;
+    }
+
+    // Compute dv: finite differences along y using direct global memory access
+    if (i < nx && j < ny - 1) {
+        double dh_dy = (d_h[i * (ny + 1) + j + 1] - h) / dy;
+        d_dv[i * ny + j] = -g * dh_dy;
+    }
+
+    __syncthreads();
+
+    // Multistep update for h, u, v
+    d_h[i * (ny + 1) + j] += (a1 * d_dh[i * ny + j] + a2 * d_dh1[i * ny + j] + a3 * d_dh2[i * ny + j]) * dt;
+    if (i + 1 < nx) {
+        d_u[(i + 1) * ny + j] += (a1 * d_du[i * ny + j] + a2 * d_du1[i * ny + j] + a3 * d_du2[i * ny + j]) * dt;
+    }
+    if (j + 1 < ny) {
+        d_v[i * (ny + 1) + j + 1] += (a1 * d_dv[i * ny + j] + a2 * d_dv1[i * ny + j] + a3 * d_dv2[i * ny + j]) * dt;
+    }
+}
+
+// Set up a CUDA Graph to optimize repeated launches
+cudaGraph_t graph;
+cudaGraphExec_t graphExec;
+bool graphCreated = false;
+
+void initialize_cuda_graph() {
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+    
+    int shared_mem_size = 3 * BLOCKSIZE * sizeof(double);
+
+    dim3 gridDim((nx * ny + BLOCKSIZE - 1) / BLOCKSIZE);
+    dim3 blockDim(BLOCKSIZE);
+
+
+    double a1, a2, a3;
+    if (t == 0) {
+        a1 = 1.0;
+        a2 = 0.0;
+        a3 = 0.0;
+    } else if (t == 1) {
+        a1 = 3.0 / 2.0;
+        a2 = -1.0 / 2.0;
+        a3 = 0.0;
+    } else {
+        a1 = 23.0 / 12.0;
+        a2 = -16.0 / 12.0;
+        a3 = 5.0 / 12.0;
+    }
+    
+    // boundary_conditions<<<gridDim, blockDim, 0, stream>>>(d_h, d_u, d_v, nx, ny);
+    compute_and_multistep_kernel<<<gridDim, blockDim, shared_mem_size, stream>>>(
+        d_h, d_u, d_v, d_dh, d_du, d_dv, d_dh1, d_du1, d_dv1, d_dh2, d_du2, d_dv2,
+        H, g, dx, dy, a1, a2, a3, dt, nx, ny
+    );
+
+    cudaStreamEndCapture(stream, &graph);
+    cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+    graphCreated = true;
+}
+
+void step() {
+    if (!graphCreated) {
+        initialize_cuda_graph();
+    }
+
+    cudaGraphLaunch(graphExec, 0);
+    cudaDeviceSynchronize();
+
+    // Rotate pointers for the multistep update
+    double *tmp;
+    tmp = d_dh2; d_dh2 = d_dh1; d_dh1 = d_dh; d_dh = tmp;
+    tmp = d_du2; d_du2 = d_du1; d_du1 = d_du; d_du = tmp;
+    tmp = d_dv2; d_dv2 = d_dv1; d_dv1 = d_dv; d_dv = tmp;
+
+    t++;
+}
+
+void cleanup_cuda_graph() {
+    if (graphCreated) {
+        cudaGraphExecDestroy(graphExec);
+        cudaGraphDestroy(graph);
+        graphCreated = false;
+    }
+}
+
+// Transfer function to copy h field back to host
+void transfer(double *h_host) {
+    cudaMemcpy(h_host, d_h, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyDeviceToHost);
+}
+
+// Free GPU memory
+void free_memory() {
+    cudaFree(d_h);
+    cudaFree(d_u);
+    cudaFree(d_v);
+    cudaFree(d_dh);
+    cudaFree(d_du);
+    cudaFree(d_dv);
+    cudaFree(d_dh1);
+    cudaFree(d_du1);
+    cudaFree(d_dv1);
+    cudaFree(d_dh2);
+    cudaFree(d_du2);
+    cudaFree(d_dv2);
+}
+
+// Initialize GPU memory and copy initial data
+void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_) {
+    nx = nx_;
+    ny = ny_;
+    H = H_;
+    g = g_;
+    dx = length_ / nx;
+    dy = width_ / ny;
+    dt = dt_;
+
+    cudaMalloc(&d_h, (nx + 1) * (ny + 1) * sizeof(double));
+    cudaMalloc(&d_u, nx * ny * sizeof(double));
+    cudaMalloc(&d_v, (nx + 1) * (ny + 1) * sizeof(double));
+    cudaMalloc(&d_dh, nx * ny * sizeof(double));
+    cudaMalloc(&d_du, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv, nx * ny * sizeof(double));
+    cudaMalloc(&d_dh1, nx * ny * sizeof(double));
+    cudaMalloc(&d_du1, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv1, nx * ny * sizeof(double));
+    cudaMalloc(&d_dh2, nx * ny * sizeof(double));
+    cudaMalloc(&d_du2, nx * ny * sizeof(double));
+    cudaMalloc(&d_dv2, nx * ny * sizeof(double));
+
+    cudaMemcpy(d_h, h0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v, v0, (nx + 1) * (ny + 1) * sizeof(double), cudaMemcpyHostToDevice);
+}
