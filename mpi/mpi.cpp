@@ -2,15 +2,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <cstring>
 
+#define ny local_ny
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
-#define idx(i, j) ((i) * (local_ny) + (j))
 
 int rank, num_procs;
 int local_nx, local_ny;
 int global_nx, global_ny;
-int start_x, end_x;
 
 double *h, *u, *v;
 double *dh, *du, *dv;
@@ -21,19 +21,7 @@ double *send_buffer, *recv_buffer;
 double H, g, dx, dy, dt;
 int t = 0;
 
-/**
- * This is your initialization function! It is very similar to the one in
- * serial.cpp, but with some difference. Firstly, only the process with rank 0
- * is going to actually generate the initial conditions h0, u0, and v0, so all
- * other processes are going to get nullptrs. Therefore, you'll need to find some
- * way to scatter the initial conditions to all processes. Secondly, now the
- * rank and num_procs arguments are passed to the function, so you can use them
- * to determine which rank the node running this process has, and how many
- * processes are running in total. This is useful to determine which part of the
- * domain each process is going to be responsible for.
- */
-void init(double *h0, double *u0, double *v0, double length_, double width_, 
-          int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
 {
     rank = rank_;
     num_procs = num_procs_;
@@ -45,22 +33,14 @@ void init(double *h0, double *u0, double *v0, double length_, double width_,
         local_nx++;
     }
     local_ny = global_ny;
-    
-    start_x = rank * (global_nx / num_procs);
-    if (rank < global_nx % num_procs) {
-        start_x += rank;
-    } else {
-        start_x += global_nx % num_procs;
-    }
-    end_x = start_x + local_nx;
 
-    h = (double*)calloc((local_nx + 2) * (local_ny + 2), sizeof(double));
-    u = (double*)calloc((local_nx + 2) * (local_ny + 2), sizeof(double));
-    v = (double*)calloc((local_nx + 2) * (local_ny + 2), sizeof(double));
+    h = (double*)calloc((local_nx+2) * (local_ny + 2), sizeof(double));
+    u = (double*)calloc((local_nx+2) * (local_ny+1), sizeof(double));
+    v = (double*)calloc((local_nx+1) * (local_ny + 2), sizeof(double));
     
-    dh = (double*)calloc(local_nx * local_ny, sizeof(double));
-    du = (double*)calloc(local_nx * local_ny, sizeof(double));
-    dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    dh = (double*)calloc((local_nx+2) * (local_ny + 2), sizeof(double));
+    du = (double*)calloc((local_nx+2) * (local_ny+1), sizeof(double));
+    dv = (double*)calloc((local_nx+1) * (local_ny + 2), sizeof(double));
     
     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
@@ -70,8 +50,8 @@ void init(double *h0, double *u0, double *v0, double length_, double width_,
     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
 
-    send_buffer = (double*)calloc(local_ny, sizeof(double));
-    recv_buffer = (double*)calloc(local_ny, sizeof(double));
+    send_buffer = (double*)calloc(local_ny+2, sizeof(double));
+    recv_buffer = (double*)calloc(local_ny+2, sizeof(double));
 
     H = H_;
     g = g_;
@@ -85,122 +65,71 @@ void init(double *h0, double *u0, double *v0, double length_, double width_,
 
     for (int i = 0; i < num_procs; i++) {
         int nx_i = global_nx / num_procs + (i < global_nx % num_procs ? 1 : 0);
-        sendcounts[i] = nx_i * global_ny;
+        sendcounts[i] = nx_i * (global_ny + 1);
         displs[i] = offset;
         offset += sendcounts[i];
     }
 
+    int *u_sendcounts = new int[num_procs];
+    int *u_displs = new int[num_procs];
+    int u_offset = 0;
+
+    for (int i = 0; i < num_procs; i++) {
+        int nx_i = global_nx / num_procs + (i < global_nx % num_procs ? 1 : 0);
+        u_sendcounts[i] = nx_i * global_ny;
+        u_displs[i] = u_offset;
+        u_offset += u_sendcounts[i];
+    }
+
     if (rank == 0) {
-        MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(u0, u_sendcounts, u_displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(nullptr, u_sendcounts, u_displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     }
 
     delete[] sendcounts;
     delete[] displs;
-
-    double init_time = MPI_Wtime();
-    init_time = MPI_Wtime() - init_time;
-    printf("Initialization time for rank %d: %.6f\n", rank, init_time);
+    
+    delete[] u_sendcounts;
+    delete[] u_displs;
 }
 
 void exchange_ghost_cells()
 {
     MPI_Status status;
-    int left = (rank == 0) ? num_procs - 1 : rank - 1;
-    int right = (rank == num_procs - 1) ? 0 : rank + 1;
+    int right = (rank == num_procs - 1) ? MPI_PROC_NULL : rank + 1;
+    int left = (rank == 0) ? MPI_PROC_NULL : rank - 1;
 
-    // Exchange h ghost cells
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = h[idx(local_nx, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, right, 0,
-                 recv_buffer, local_ny, MPI_DOUBLE, left, 0,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        h[idx(0, j+1)] = recv_buffer[j];
+    std::memcpy(send_buffer, h + local_nx * local_ny, local_ny * sizeof(double));
+
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 0, recv_buffer, local_ny, MPI_DOUBLE, right, 0, MPI_COMM_WORLD, &status);
+    
+    for (int j = 1; j <= local_ny; j++) {
+        h(local_nx + 1, j) = recv_buffer[j - 1];
     }
 
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = h[idx(1, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 1,
-                 recv_buffer, local_ny, MPI_DOUBLE, right, 1,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        h[idx(local_nx+1, j+1)] = recv_buffer[j];
-    }
-
-    // Exchange u ghost cells
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = u[idx(local_nx, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, right, 2,
-                 recv_buffer, local_ny, MPI_DOUBLE, left, 2,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        u[idx(0, j+1)] = recv_buffer[j];
-    }
-
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = u[idx(1, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 3,
-                 recv_buffer, local_ny, MPI_DOUBLE, right, 3,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        u[idx(local_nx+1, j+1)] = recv_buffer[j];
-    }
-
-    // Exchange v ghost cells
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = v[idx(local_nx, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, right, 4,
-                 recv_buffer, local_ny, MPI_DOUBLE, left, 4,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        v[idx(0, j+1)] = recv_buffer[j];
-    }
-
-    for (int j = 0; j < local_ny; j++) {
-        send_buffer[j] = v[idx(1, j+1)];
-    }
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 5,
-                 recv_buffer, local_ny, MPI_DOUBLE, right, 5,
-                 MPI_COMM_WORLD, &status);
-    for (int j = 0; j < local_ny; j++) {
-        v[idx(local_nx+1, j+1)] = recv_buffer[j];
-    }
 }
-
 
 void compute_derivatives()
 {
-    for (int i = 1; i <= local_nx; i++) {
-        for (int j = 1; j <= local_ny; j++) {
-            double dx_h = (h[idx(i+1,j)] - h[idx(i-1,j)]) / (2.0 * dx);
-            double dy_h = (h[idx(i,j+1)] - h[idx(i,j-1)]) / (2.0 * dy);
-            
-            double dx_u = (u[idx(i+1,j)] - u[idx(i-1,j)]) / (2.0 * dx);
-            double dy_v = (v[idx(i,j+1)] - v[idx(i,j-1)]) / (2.0 * dy);
+    for (int i = 1; i < local_nx+1; i++)
+    {
+        for (int j = 1; j < local_ny+1; j++)
+        {
+            double dhdx = (h(i , j) - h(i-1, j)) / dx;
+            double dhdy = (h(i-1, j + 1) - h(i-1, j)) / dy;
 
-            dh[idx(i-1,j-1)] = -H * (dx_u + dy_v);
-            du[idx(i-1,j-1)] = -g * dx_h;
-            dv[idx(i-1,j-1)] = -g * dy_h;
+            dh(i-1, j) = -H * (du_dx(i-1, j) + dv_dy(i-1, j));
+            du(i-1, j) = -g * dhdx;
+            dv(i-1, j) = -g * dhdy;
         }
     }
 }
 
-/**
- * This is your step function! It is very similar to the one in serial.cpp, but
- * now the domain is divided among the processes, so you'll need to find some
- * way to communicate the ghost cells between processes.
- */
 void step()
 {
     exchange_ghost_cells();
@@ -211,14 +140,14 @@ void step()
     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
 
-    for (int i = 1; i <= local_nx; i++) {
-        for (int j = 1; j <= local_ny; j++) {
-            h[idx(i,j)] += (a1 * dh[idx(i-1,j-1)] + a2 * dh1[idx(i-1,j-1)] + 
-                           a3 * dh2[idx(i-1,j-1)]) * dt;
-            u[idx(i,j)] += (a1 * du[idx(i-1,j-1)] + a2 * du1[idx(i-1,j-1)] + 
-                           a3 * du2[idx(i-1,j-1)]) * dt;
-            v[idx(i,j)] += (a1 * dv[idx(i-1,j-1)] + a2 * dv1[idx(i-1,j-1)] + 
-                           a3 * dv2[idx(i-1,j-1)]) * dt;
+
+    for (int i = 0; i < local_nx; i++)
+    {
+        for (int j = 0; j < local_ny; j++)
+        {
+            h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+            u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+            v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
         }
     }
 
@@ -230,13 +159,6 @@ void step()
     t++;
 }
 
-/**
- * This is your transfer function! Similar to what you did in gpu.cu, you'll
- * need to get the data from the computers you're working on (there it was
- * the GPU, now its a bunch of CPU nodes), and send them all back to the process
- * which is actually running the main function (then it was the CPU, not it's
- * the node with rank 0).
- */
 void transfer(double *h_recv)
 {
     int *recvcounts = new int[num_procs];
@@ -245,25 +167,17 @@ void transfer(double *h_recv)
 
     for (int i = 0; i < num_procs; i++) {
         int nx_i = global_nx / num_procs + (i < global_nx % num_procs ? 1 : 0);
-        recvcounts[i] = nx_i * local_ny;
+        recvcounts[i] = nx_i * (global_ny + 1);
         displs[i] = offset;
         offset += recvcounts[i];
     }
 
-    MPI_Gatherv(h + (local_ny + 2), local_nx * local_ny, MPI_DOUBLE, 
-                h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(h, local_nx * (local_ny + 1), MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     delete[] recvcounts;
     delete[] displs;
 }
 
-
-/**
- * This is your finalization function! Since different nodes are going to be
- * initializing different chunks of memory, make sure to check which node
- * is running the code before you free some memory you haven't allocated, or
- * that you've actually freed memory that you have.
- */
 void free_memory()
 {
     free(h); free(u); free(v);
