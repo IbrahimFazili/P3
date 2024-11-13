@@ -2961,8 +2961,2380 @@
 
 
 
+//mpic++ common/main.cpp common/scenarios.cpp mpi/mpi.cpp -o build/mpi -DMPI -lm
+//mpirun --mca btl ^sm ./build/mpi --nx 1000 --ny 1000 --num_iter 1000 --output build/mpi.out
+
+// max error 12
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h + local_ny, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h + local_ny, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
 
 
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h + local_ny, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// 12 error
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+
+// no haloing, error 13
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     // h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     // u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     h = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     u = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+
+//     for (int j = 0; j < local_ny; j++) h(local_nx, j) = h(0, j);
+//     for (int i = 0; i < local_nx; i++) h(i, local_ny) = h(i, 0);
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 0; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 0; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// error 12 wip
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 0; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 0; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = (local_nx_i + 1) * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, (local_nx + 1) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// error 12 wip
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * (local_ny + 1), sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 0; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 0; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// 12.4 max error
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Exchange ghost cells for u array
+//     // Send the last data row to the bottom and receive the top ghost row for u
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 3, recv_buffer, local_ny, MPI_DOUBLE, up, 3, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = (local_nx_i + 1) * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, (local_nx + 1) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// 9.993751882421389
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Exchange ghost cells for u array
+//     // Send the last data row to the bottom and receive the top ghost row for u
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 3, recv_buffer, local_ny, MPI_DOUBLE, up, 3, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx - 1; i++)
+//     {
+//         for (int j = 0; j < local_ny - 1; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Extra row for processes with uneven division
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
+//         displs[i] = offset;                      // Offset in the global array
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h + local_nx, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Exchange ghost cells for u array
+//     // Send the last data row to the bottom and receive the top ghost row for u
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 3, recv_buffer, local_ny, MPI_DOUBLE, up, 3, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         recvcounts[i] = (local_nx_i + 1) * global_ny;  
+//         displs[i] = offset;                      
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+
+// super close!
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Exchange ghost cells for u array
+//     // Send the last data row to the bottom and receive the top ghost row for u
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 3, recv_buffer, local_ny, MPI_DOUBLE, up, 3, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             if (i + 1 < local_nx) {
+//                 u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             }
+//             if (j + 1 < local_ny) {
+//                 v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//             }
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         recvcounts[i] = (local_nx_i + 1) * global_ny;  
+//         displs[i] = offset;                      
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, (local_nx + 1) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+// 12.3
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 1) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, h, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(h + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+//      // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, u, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(u + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+// }
+
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             if (i + 1 < local_nx) {
+//                 u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             }
+//             if (j + 1 < local_ny) {
+//                 v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//             }
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         recvcounts[i] = (local_nx_i + 1) * global_ny;  
+//         displs[i] = offset;                      
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, (local_nx + 1) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+//12.1
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 2) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, h, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(h + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+//      // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, u, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(u + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+// }
+
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             if (i + 1 < local_nx) {
+//                 u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             }
+//             if (j + 1 < local_ny) {
+//                 v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//             }
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         recvcounts[i] = (local_nx_i + 2) * global_ny;  
+//         displs[i] = offset;                      
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h, (local_nx + 2) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// }
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+//11.something
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         displs[i] = offset;                      // Starting position in the global array
+//         offset += sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  // Processes with an extra row
+//         }
+//         h_sendcounts[i] = (local_nx_i + 2) * global_ny;  // Total elements for each process (local_nx * local_ny)
+//         h_displs[i] = h_offset;                      // Starting position in the global array
+//         h_offset += h_sendcounts[i];                 // Update offset for the next process
+//     }
+
+//     // if (rank == 0) {
+//     //     MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//     //     MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     //     MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     // } else {
+//     //     MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//     //     MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     //     MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     // }
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h + local_ny, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u + local_ny, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h + local_ny, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u + local_ny, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, h, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(h + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+//      // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, u, local_ny * sizeof(double));  // Copy first data row
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(u + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Place into the bottom ghost row
+
+// }
+
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             if (i + 1 < local_nx) {
+//                 u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             }
+//             if (j + 1 < local_ny) {
+//                 v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//             }
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// // void transfer(double *h_recv)
+// // {
+// //     int *recvcounts = new int[num_procs];
+// //     int *displs = new int[num_procs];
+// //     int offset = 0;
+
+// //     for (int i = 0; i < num_procs; i++) {
+// //         int local_nx_i = global_nx / num_procs;
+// //         if (i < global_nx % num_procs) {
+// //             local_nx_i++;  
+// //         }
+// //         recvcounts[i] = (local_nx_i + 2) * global_ny;  
+// //         displs[i] = offset;                      
+// //         offset += recvcounts[i];
+// //     }
+
+// //     MPI_Gatherv(h, (local_nx + 2) * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+// // }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         // Only count the actual data rows, excluding ghost rows
+//         recvcounts[i] = local_nx_i * global_ny;
+//         displs[i] = offset;
+//         offset += recvcounts[i];
+//     }
+
+//     // Perform the gather, but start from h + local_ny to skip the top ghost row and limit to only local_nx * local_ny rows
+//     MPI_Gatherv(h + local_ny, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+//     delete[] recvcounts;
+//     delete[] displs;
+// }
+
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
+
+
+
+
+//closer - smoother
 #include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2999,7 +5371,7 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     }
     local_ny = global_ny;
 
-    h = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+    h = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
     u = (double*)calloc((local_nx + 1) * local_ny, sizeof(double));
     v = (double*)calloc(local_nx * local_ny, sizeof(double));
     
@@ -3031,20 +5403,34 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     for (int i = 0; i < num_procs; i++) {
         int local_nx_i = global_nx / num_procs;
         if (i < global_nx % num_procs) {
-            local_nx_i++;  // Processes with an extra row
+            local_nx_i++;  
         }
-        sendcounts[i] = local_nx_i * global_ny;  // Total elements for each process (local_nx * local_ny)
-        displs[i] = offset;                      // Starting position in the global array
-        offset += sendcounts[i];                 // Update offset for the next process
+        sendcounts[i] = local_nx_i * global_ny;  
+        displs[i] = offset;                      
+        offset += sendcounts[i];                 
+    }
+
+    int *h_sendcounts = new int[num_procs];
+    int *h_displs = new int[num_procs];
+    int h_offset = 0;
+
+    for (int i = 0; i < num_procs; i++) {
+        int local_nx_i = global_nx / num_procs;
+        if (i < global_nx % num_procs) {
+            local_nx_i++;  
+        }
+        h_sendcounts[i] = (local_nx_i + 1) * global_ny;  
+        h_displs[i] = h_offset;                      
+        h_offset += h_sendcounts[i];                 
     }
 
     if (rank == 0) {
-        MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h + local_ny, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
-        MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+        MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h + local_ny, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
-        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+        MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 1) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     }
 
@@ -3059,19 +5445,40 @@ void exchange_ghost_cells() {
     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
 
     // Send the last data row to the bottom and receive the top ghost row
-    std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));  // Copy last data row
+    std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));
     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
-    std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Place into the top ghost row
+    std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Top ghost row
+
+    // Send the first data row to the top and receive the bottom ghost row
+    std::memcpy(send_buffer, h, local_ny * sizeof(double));
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+    std::memcpy(h + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Bottom ghost row
+
+    // Send the last data row to the bottom and receive the top ghost row
+    std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+    std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Top ghost row
+
+    // Send the first data row to the top and receive the bottom ghost row
+    std::memcpy(send_buffer, u, local_ny * sizeof(double));
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+    std::memcpy(u + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Bottom ghost row
 }
 
 void compute_derivatives()
 {
-    for (int i = 1; i < local_nx - 1; i++)
+    for (int i = 1; i < local_nx; i++)
     {
         for (int j = 0; j < local_ny; j++)
         {
-            double dhdx = (h(i + 1, j) - h(i, j)) / dx;
-            double dhdy = (h(i, j + 1) - h(i, j)) / dy;
+            double dhdx = 0.0;
+            double dhdy = 0.0;
+            if (i + 1 < local_nx) {
+                dhdx = (h(i + 1, j) - h(i, j)) / dx;
+            }
+            if (j + 1 < local_ny) {
+                dhdy = (h(i, j + 1) - h(i, j)) / dy;
+            }
 
             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
             du(i, j) = -g * dhdx;
@@ -3090,14 +5497,17 @@ void step()
     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
 
-
-    for (int i = 1; i < local_nx - 1; i++)
+    for (int i = 1; i < local_nx; i++)
     {
         for (int j = 0; j < local_ny; j++)
         {
             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
-            u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
-            v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+            if (i + 1 < local_nx) {
+                u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+            }
+            if (j + 1 < local_ny) {
+                v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+            }
         }
     }
 
@@ -3118,16 +5528,19 @@ void transfer(double *h_recv)
     for (int i = 0; i < num_procs; i++) {
         int local_nx_i = global_nx / num_procs;
         if (i < global_nx % num_procs) {
-            local_nx_i++;  // Extra row for processes with uneven division
+            local_nx_i++;  
         }
-        recvcounts[i] = local_nx_i * global_ny;  // Only the data portion
-        displs[i] = offset;                      // Offset in the global array
+        recvcounts[i] = local_nx_i * global_ny;  // Only actual data rows
+        displs[i] = offset;
         offset += recvcounts[i];
     }
 
     MPI_Gatherv(h + local_ny, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+    delete[] recvcounts;
+    delete[] displs;
 }
+
 
 void free_memory()
 {
@@ -3138,3 +5551,224 @@ void free_memory()
     free(send_buffer);
     free(recv_buffer);
 }
+
+
+
+
+
+// #include <mpi.h>
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include <cstring>
+
+// #define ny local_ny
+// #include "../common/common.hpp"
+// #include "../common/solver.hpp"
+
+// int rank, num_procs;
+// int local_nx, local_ny;
+// int global_nx, global_ny;
+
+// double *h, *u, *v;
+// double *dh, *du, *dv;
+// double *dh1, *du1, *dv1;
+// double *dh2, *du2, *dv2;
+// double *send_buffer, *recv_buffer;
+
+// double H, g, dx, dy, dt;
+// int t = 0;
+
+// void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
+// {
+//     rank = rank_;
+//     num_procs = num_procs_;
+//     global_nx = nx_;
+//     global_ny = ny_;
+    
+//     local_nx = global_nx / num_procs;
+//     if (rank < global_nx % num_procs) {
+//         local_nx++;
+//     }
+//     local_ny = global_ny;
+
+//     h = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     u = (double*)calloc((local_nx + 2) * local_ny, sizeof(double));
+//     v = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv1 = (double*)calloc(local_nx * local_ny, sizeof(double));
+    
+//     dh2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+//     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
+
+//     send_buffer = (double*)calloc(local_ny, sizeof(double));
+//     recv_buffer = (double*)calloc(local_ny, sizeof(double));
+
+//     H = H_;
+//     g = g_;
+//     dx = length_ / global_nx;
+//     dy = width_ / global_ny;
+//     dt = dt_;
+
+//     int *sendcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         sendcounts[i] = local_nx_i * global_ny;  
+//         displs[i] = offset;                      
+//         offset += sendcounts[i];                 
+//     }
+
+//     int *h_sendcounts = new int[num_procs];
+//     int *h_displs = new int[num_procs];
+//     int h_offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         h_sendcounts[i] = (local_nx_i + 2) * global_ny;  
+//         h_displs[i] = h_offset;                      
+//         h_offset += h_sendcounts[i];                 
+//     }
+
+//     if (rank == 0) {
+//         MPI_Scatterv(h0, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(u0, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     } else {
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, h, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD); 
+//         MPI_Scatterv(nullptr, h_sendcounts, h_displs, MPI_DOUBLE, u, (local_nx + 2) * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//     }
+
+//     delete[] sendcounts;
+//     delete[] displs;
+
+// }
+
+// void exchange_ghost_cells() {
+//     MPI_Status status;
+//     int up = (rank == 0) ? num_procs - 1 : rank - 1;
+//     int down = (rank == num_procs - 1) ? 0 : rank + 1; 
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, h + (local_nx - 1) * local_ny, local_ny * sizeof(double));
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(h, recv_buffer, local_ny * sizeof(double));  // Top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, h, local_ny * sizeof(double));
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(h + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Bottom ghost row
+
+//     // Send the last data row to the bottom and receive the top ghost row
+//     std::memcpy(send_buffer, u + (local_nx - 1) * local_ny, local_ny * sizeof(double));
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, down, 1, recv_buffer, local_ny, MPI_DOUBLE, up, 1, MPI_COMM_WORLD, &status);
+//     std::memcpy(u, recv_buffer, local_ny * sizeof(double));  // Top ghost row
+
+//     // Send the first data row to the top and receive the bottom ghost row
+//     std::memcpy(send_buffer, u, local_ny * sizeof(double));
+//     MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, up, 2, recv_buffer, local_ny, MPI_DOUBLE, down, 2, MPI_COMM_WORLD, &status);
+//     std::memcpy(u + local_nx * local_ny, recv_buffer, local_ny * sizeof(double));  // Bottom ghost row
+// }
+
+// void compute_derivatives()
+// {
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             double dhdx = 0.0;
+//             double dhdy = 0.0;
+//             if (i + 1 < local_nx) {
+//                 dhdx = (h(i + 1, j) - h(i, j)) / dx;
+//             }
+//             if (j + 1 < local_ny) {
+//                 dhdy = (h(i, j + 1) - h(i, j)) / dy;
+//             }
+
+//             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+//             du(i, j) = -g * dhdx;
+//             dv(i, j) = -g * dhdy;
+//         }
+//     }
+// }
+
+// void step()
+// {
+//     exchange_ghost_cells();
+//     compute_derivatives();
+
+//     double a1, a2, a3;
+//     if (t == 0) { a1 = 1.0; a2 = a3 = 0.0; }
+//     else if (t == 1) { a1 = 3.0 / 2.0; a2 = -1.0 / 2.0; a3 = 0.0; }
+//     else { a1 = 23.0 / 12.0; a2 = -16.0 / 12.0; a3 = 5.0 / 12.0; }
+
+//     for (int i = 1; i < local_nx; i++)
+//     {
+//         for (int j = 0; j < local_ny; j++)
+//         {
+//             h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+//             if (i + 1 < local_nx) {
+//                 u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+//             }
+//             if (j + 1 < local_ny) {
+//                 v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+//             }
+//         }
+//     }
+
+//     double *tmp;
+//     tmp = dh2; dh2 = dh1; dh1 = dh; dh = tmp;
+//     tmp = du2; du2 = du1; du1 = du; du = tmp;
+//     tmp = dv2; dv2 = dv1; dv1 = dv; dv = tmp;
+
+//     t++;
+// }
+
+// void transfer(double *h_recv)
+// {
+//     int *recvcounts = new int[num_procs];
+//     int *displs = new int[num_procs];
+//     int offset = 0;
+
+//     for (int i = 0; i < num_procs; i++) {
+//         int local_nx_i = global_nx / num_procs;
+//         if (i < global_nx % num_procs) {
+//             local_nx_i++;  
+//         }
+//         recvcounts[i] = local_nx_i * global_ny;  // Only actual data rows
+//         displs[i] = offset;
+//         offset += recvcounts[i];
+//     }
+
+//     MPI_Gatherv(h + local_ny, local_nx * local_ny, MPI_DOUBLE, h_recv, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+//     delete[] recvcounts;
+//     delete[] displs;
+// }
+
+
+// void free_memory()
+// {
+//     free(h); free(u); free(v);
+//     free(dh); free(du); free(dv);
+//     free(dh1); free(du1); free(dv1);
+//     free(dh2); free(du2); free(dv2);
+//     free(send_buffer);
+//     free(recv_buffer);
+// }
