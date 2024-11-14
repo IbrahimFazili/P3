@@ -70,32 +70,18 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
         offset += sendcounts[i];
     }
 
-    int *u_sendcounts = new int[num_procs];
-    int *u_displs = new int[num_procs];
-    int u_offset = 0;
-
-    for (int i = 0; i < num_procs; i++) {
-        int nx_i = global_nx / num_procs + (i < global_nx % num_procs ? 1 : 0);
-        u_sendcounts[i] = nx_i * global_ny;
-        u_displs[i] = u_offset;
-        u_offset += u_sendcounts[i];
-    }
-
     if (rank == 0) {
         MPI_Scatterv(h0, sendcounts, displs, MPI_DOUBLE, h, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(u0, u_sendcounts, u_displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(u0, sendcounts, displs, MPI_DOUBLE, u, local_nx * (local_ny+1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(v0, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     } else {
         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, h, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Scatterv(nullptr, u_sendcounts, u_displs, MPI_DOUBLE, u, local_nx * local_ny, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, u, local_nx * (local_ny+1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Scatterv(nullptr, sendcounts, displs, MPI_DOUBLE, v, local_nx * (local_ny + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     }
 
     delete[] sendcounts;
     delete[] displs;
-    
-    delete[] u_sendcounts;
-    delete[] u_displs;
 }
 
 void exchange_ghost_cells()
@@ -116,16 +102,16 @@ void exchange_ghost_cells()
 
 void compute_derivatives()
 {
-    for (int i = 1; i < local_nx+1; i++)
+    for (int i = 0; i < local_nx; i++)
     {
-        for (int j = 1; j < local_ny+1; j++)
+        for (int j = 0; j < local_ny+1; j++)
         {
-            double dhdx = (h(i , j) - h(i-1, j)) / dx;
-            double dhdy = (h(i-1, j + 1) - h(i-1, j)) / dy;
+            double dhdx = (h(i, j) - h(i, j)) / dx;
+            double dhdy = (h(i, j + 1) - h(i, j)) / dy;
 
-            dh(i-1, j) = -H * (du_dx(i-1, j) + dv_dy(i-1, j));
-            du(i-1, j) = -g * dhdx;
-            dv(i-1, j) = -g * dhdy;
+            dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
+            du(i, j) = -g * dhdx;
+            dv(i, j) = -g * dhdy;
         }
     }
 }
