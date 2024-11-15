@@ -106,7 +106,7 @@ void compute_derivatives()
     {
         for (int j = 0; j < local_ny+1; j++)
         {
-            double dhdx = (h(i, j) - h(i, j)) / dx;
+            double dhdx = (h(i+1, j) - h(i, j)) / dx;
             double dhdy = (h(i, j + 1) - h(i, j)) / dy;
 
             dh(i, j) = -H * (du_dx(i, j) + dv_dy(i, j));
