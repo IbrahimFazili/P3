@@ -34,9 +34,9 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     }
     local_ny = global_ny;
 
-    h = (double*)calloc((local_nx+1) * (local_ny), sizeof(double));
-    u = (double*)calloc((local_nx+1) * (local_ny), sizeof(double));
-    v = (double*)calloc((local_nx) * (local_ny ), sizeof(double));
+    h = (double*)calloc((local_nx+2) * (local_ny+2), sizeof(double));
+    u = (double*)calloc((local_nx+2) * (local_ny+2), sizeof(double));
+    v = (double*)calloc((local_nx+2) * (local_ny+2 ), sizeof(double));
     
     dh = (double*)calloc((local_nx) * (local_ny), sizeof(double));
     du = (double*)calloc((local_nx) * (local_ny), sizeof(double));
@@ -180,12 +180,29 @@ void transfer(double *h_recv)
     delete[] displs;
 }
 
-void free_memory()
-{
-    free(h); free(u); free(v);
-    free(dh); free(du); free(dv);
-    free(dh1); free(du1); free(dv1);
-    free(dh2); free(du2); free(dv2);
-    free(send_buffer);
-    free(recv_buffer);
+void free_memory() {
+    // Track what's been freed
+    static bool freed = false;
+    if (freed) return;
+    
+    if (h) { free(h); h = nullptr; }
+    if (u) { free(u); u = nullptr; }
+    if (v) { free(v); v = nullptr; }
+    
+    if (dh) { free(dh); dh = nullptr; }
+    if (du) { free(du); du = nullptr; }
+    if (dv) { free(dv); dv = nullptr; }
+    
+    if (dh1) { free(dh1); dh1 = nullptr; }
+    if (du1) { free(du1); du1 = nullptr; }
+    if (dv1) { free(dv1); dv1 = nullptr; }
+    
+    if (dh2) { free(dh2); dh2 = nullptr; }
+    if (du2) { free(du2); du2 = nullptr; }
+    if (dv2) { free(dv2); dv2 = nullptr; }
+    
+    if (send_buffer) { free(send_buffer); send_buffer = nullptr; }
+    if (recv_buffer) { free(recv_buffer); recv_buffer = nullptr; }
+    
+    freed = true;
 }
