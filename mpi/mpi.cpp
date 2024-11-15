@@ -34,13 +34,13 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     }
     local_ny = global_ny;
 
-    h = (double*)calloc((local_nx+2) * (local_ny + 2), sizeof(double));
-    u = (double*)calloc((local_nx+2) * (local_ny+1), sizeof(double));
-    v = (double*)calloc((local_nx+1) * (local_ny + 2), sizeof(double));
+    h = (double*)calloc((local_nx+1) * (local_ny), sizeof(double));
+    u = (double*)calloc((local_nx+1) * (local_ny), sizeof(double));
+    v = (double*)calloc((local_nx) * (local_ny ), sizeof(double));
     
-    dh = (double*)calloc((local_nx+2) * (local_ny + 2), sizeof(double));
-    du = (double*)calloc((local_nx+2) * (local_ny+1), sizeof(double));
-    dv = (double*)calloc((local_nx+1) * (local_ny + 2), sizeof(double));
+    dh = (double*)calloc((local_nx) * (local_ny), sizeof(double));
+    du = (double*)calloc((local_nx) * (local_ny), sizeof(double));
+    dv = (double*)calloc((local_nx) * (local_ny), sizeof(double));
     
     dh1 = (double*)calloc(local_nx * local_ny, sizeof(double));
     du1 = (double*)calloc(local_nx * local_ny, sizeof(double));
@@ -50,8 +50,8 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     du2 = (double*)calloc(local_nx * local_ny, sizeof(double));
     dv2 = (double*)calloc(local_nx * local_ny, sizeof(double));
 
-    send_buffer = (double*)calloc(local_ny+2, sizeof(double));
-    recv_buffer = (double*)calloc(local_ny+2, sizeof(double));
+    send_buffer = (double*)calloc(local_ny, sizeof(double));
+    recv_buffer = (double*)calloc(local_ny, sizeof(double));
 
     H = H_;
     g = g_;
@@ -84,18 +84,34 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     delete[] displs;
 }
 
-void exchange_ghost_cells()
-{
+void exchange_ghost_cells() {
     MPI_Status status;
     int right = (rank == num_procs - 1) ? MPI_PROC_NULL : rank + 1;
     int left = (rank == 0) ? MPI_PROC_NULL : rank - 1;
 
-    std::memcpy(send_buffer, h + local_nx * local_ny, local_ny * sizeof(double));
+    // Exchange h ghost cells
+    // Send rightmost column to right neighbor
+    for (int j = 0; j < local_ny; j++) {
+        send_buffer[j] = h(local_nx-1, j);  // Last real column
+    }
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, right, 0,
+                 recv_buffer, local_ny, MPI_DOUBLE, left, 0,
+                 MPI_COMM_WORLD, &status);
+    // Receive into leftmost ghost column
+    for (int j = 0; j < local_ny; j++) {
+        h(0, j) = recv_buffer[j];
+    }
 
-    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 0, recv_buffer, local_ny, MPI_DOUBLE, right, 0, MPI_COMM_WORLD, &status);
-    
-    for (int j = 1; j <= local_ny; j++) {
-        h(local_nx + 1, j) = recv_buffer[j - 1];
+    // Exchange back (left to right)
+    for (int j = 0; j < local_ny; j++) {
+        send_buffer[j] = h(1, j);  // First real column
+    }
+    MPI_Sendrecv(send_buffer, local_ny, MPI_DOUBLE, left, 1,
+                 recv_buffer, local_ny, MPI_DOUBLE, right, 1,
+                 MPI_COMM_WORLD, &status);
+    // Receive into rightmost ghost column  
+    for (int j = 0; j < local_ny; j++) {
+        h(local_nx, j) = recv_buffer[j];
     }
 
 }
